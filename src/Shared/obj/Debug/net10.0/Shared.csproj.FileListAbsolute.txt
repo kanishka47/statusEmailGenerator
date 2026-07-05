@@ -1,0 +1,11 @@
+Q:\Personal\StatusUpdaterApp\src\Shared\bin\Debug\net10.0\Shared.deps.json
+Q:\Personal\StatusUpdaterApp\src\Shared\bin\Debug\net10.0\Shared.dll
+Q:\Personal\StatusUpdaterApp\src\Shared\bin\Debug\net10.0\Shared.pdb
+Q:\Personal\StatusUpdaterApp\src\Shared\obj\Debug\net10.0\Shared.GeneratedMSBuildEditorConfig.editorconfig
+Q:\Personal\StatusUpdaterApp\src\Shared\obj\Debug\net10.0\Shared.AssemblyInfoInputs.cache
+Q:\Personal\StatusUpdaterApp\src\Shared\obj\Debug\net10.0\Shared.AssemblyInfo.cs
+Q:\Personal\StatusUpdaterApp\src\Shared\obj\Debug\net10.0\Shared.csproj.CoreCompileInputs.cache
+Q:\Personal\StatusUpdaterApp\src\Shared\obj\Debug\net10.0\Shared.dll
+Q:\Personal\StatusUpdaterApp\src\Shared\obj\Debug\net10.0\refint\Shared.dll
+Q:\Personal\StatusUpdaterApp\src\Shared\obj\Debug\net10.0\Shared.pdb
+Q:\Personal\StatusUpdaterApp\src\Shared\obj\Debug\net10.0\ref\Shared.dll

@@ -1,0 +1,15 @@
+Q:\Personal\StatusUpdaterApp\src\DevopsClient\bin\Debug\net10.0\DevopsClient.deps.json
+Q:\Personal\StatusUpdaterApp\src\DevopsClient\bin\Debug\net10.0\DevopsClient.dll
+Q:\Personal\StatusUpdaterApp\src\DevopsClient\bin\Debug\net10.0\DevopsClient.pdb
+Q:\Personal\StatusUpdaterApp\src\DevopsClient\bin\Debug\net10.0\Shared.dll
+Q:\Personal\StatusUpdaterApp\src\DevopsClient\bin\Debug\net10.0\Shared.pdb
+Q:\Personal\StatusUpdaterApp\src\DevopsClient\obj\Debug\net10.0\DevopsClient.csproj.AssemblyReference.cache
+Q:\Personal\StatusUpdaterApp\src\DevopsClient\obj\Debug\net10.0\DevopsClient.GeneratedMSBuildEditorConfig.editorconfig
+Q:\Personal\StatusUpdaterApp\src\DevopsClient\obj\Debug\net10.0\DevopsClient.AssemblyInfoInputs.cache
+Q:\Personal\StatusUpdaterApp\src\DevopsClient\obj\Debug\net10.0\DevopsClient.AssemblyInfo.cs
+Q:\Personal\StatusUpdaterApp\src\DevopsClient\obj\Debug\net10.0\DevopsClient.csproj.CoreCompileInputs.cache
+Q:\Personal\StatusUpdaterApp\src\DevopsClient\obj\Debug\net10.0\DevopsCl.0F88AFA4.Up2Date
+Q:\Personal\StatusUpdaterApp\src\DevopsClient\obj\Debug\net10.0\DevopsClient.dll
+Q:\Personal\StatusUpdaterApp\src\DevopsClient\obj\Debug\net10.0\refint\DevopsClient.dll
+Q:\Personal\StatusUpdaterApp\src\DevopsClient\obj\Debug\net10.0\DevopsClient.pdb
+Q:\Personal\StatusUpdaterApp\src\DevopsClient\obj\Debug\net10.0\ref\DevopsClient.dll
