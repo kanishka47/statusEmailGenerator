@@ -1,0 +1,79 @@
+name: Weekly Kanis engineering report
+
+on:
+  schedule:
+    - cron: "0 2 * * 1"
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: "Inclusive report start date (yyyy-MM-dd); defaults to 6 days before end date"
+        required: false
+        type: string
+      end_date:
+        description: "Inclusive report end date (yyyy-MM-dd); defaults to yesterday"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  generate-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      AZDO_ORG: ${{ vars.AZDO_ORG }}
+      AZDO_PROJECT: ${{ vars.AZDO_PROJECT }}
+      AZDO_REPO: ${{ vars.AZDO_REPO }}
+      AZDO_PAT: ${{ secrets.AZDO_PAT }}
+      AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_ENDPOINT }}
+      AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+      AZURE_OPENAI_DEPLOYMENT: ${{ vars.AZURE_OPENAI_DEPLOYMENT }}
+      AZURE_OPENAI_EMBEDDING_DEPLOYMENT: ${{ vars.AZURE_OPENAI_EMBEDDING_DEPLOYMENT }}
+      AZURE_OPENAI_API_VERSION: ${{ vars.AZURE_OPENAI_API_VERSION }}
+      AZURE_SEARCH_ENDPOINT: ${{ vars.AZURE_SEARCH_ENDPOINT }}
+      AZURE_SEARCH_API_KEY: ${{ secrets.AZURE_SEARCH_API_KEY }}
+      AZURE_SEARCH_INDEX_NAME: ${{ vars.AZURE_SEARCH_INDEX_NAME }}
+      COMPARE_RAG: "false"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Resolve report end date
+        id: report-date
+        shell: bash
+        env:
+          REQUESTED_END_DATE: ${{ inputs.end_date }}
+        run: |
+          if [[ -n "$REQUESTED_END_DATE" ]]; then
+            end_date="$REQUESTED_END_DATE"
+          else
+            end_date="$(date -u -d 'yesterday' +%F)"
+          fi
+          echo "end_date=$end_date" >> "$GITHUB_OUTPUT"
+
+      - name: Generate and publish weekly report
+        shell: bash
+        env:
+          REQUESTED_START_DATE: ${{ inputs.start_date }}
+          REPORT_END_DATE: ${{ steps.report-date.outputs.end_date }}
+        run: |
+          args=(weekly --author kanis --end-date "$REPORT_END_DATE" --publish)
+          if [[ -n "$REQUESTED_START_DATE" ]]; then
+            args+=(--start-date "$REQUESTED_START_DATE")
+          fi
+          dotnet run --project src/ConsoleApp --configuration Release -- "${args[@]}"
+
+      - name: Upload report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-kanis-${{ steps.report-date.outputs.end_date }}
+          path: src/ConsoleApp/bin/Release/net10.0/artifacts/weekly-completed/*.json
+          if-no-files-found: error
+          retention-days: 90

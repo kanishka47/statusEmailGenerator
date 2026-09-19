@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/ConsoleApp/ConsoleApp.csproj" />
     <Project Path="src/DevopsClient/DevopsClient.csproj" />
+    <Project Path="src/EngineeringAssistant.Mcp/EngineeringAssistant.Mcp.csproj" />
     <Project Path="src/Shared/Shared.csproj" />
     <Project Path="src/StatusGenerator/StatusGenerator.csproj" />
   </Folder>

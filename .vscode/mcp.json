@@ -1,0 +1,18 @@
+{
+  "servers": {
+    "kanis-work-history": {
+      "type": "stdio",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "${workspaceFolder}/src/EngineeringAssistant.Mcp",
+        "--configuration",
+        "Release"
+      ],
+      "env": {
+        "STATUS_UPDATER_SETTINGS": "${workspaceFolder}/src/ConsoleApp/appsettings.local.json"
+      }
+    }
+  }
+}

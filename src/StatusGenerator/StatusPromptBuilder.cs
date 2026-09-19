@@ -101,7 +101,42 @@ public class StatusPromptBuilder
             sb.AppendLine($"  Created: {pr.CreatedDate:yyyy-MM-dd}");
             sb.AppendLine($"  Updated: {pr.LastUpdatedAt:yyyy-MM-dd}");
             sb.AppendLine($"  Branch: {pr.Branch}");
+            AppendWorkItems(sb, pr.WorkItems);
+            AppendResolvedComments(sb, pr.ResolvedComments);
             sb.AppendLine($"  Unresolved comments: {unresolvedTotal}");
+        }
+    }
+
+    private static void AppendWorkItems(StringBuilder sb, List<WorkItemReference> workItems)
+    {
+        if (workItems.Count == 0)
+        {
+            sb.AppendLine("  Work items: None");
+            return;
+        }
+
+        sb.AppendLine($"  Work items: {string.Join(", ", workItems.Select(workItem => $"#{workItem.Id}"))}");
+    }
+
+    private static void AppendResolvedComments(StringBuilder sb, List<ResolvedComment> resolvedComments)
+    {
+        if (resolvedComments.Count == 0)
+        {
+            sb.AppendLine("  Resolved comments: None");
+            return;
+        }
+
+        sb.AppendLine("  Resolved comments:");
+
+        foreach (var comment in resolvedComments)
+        {
+            var content = comment.Content.ReplaceLineEndings(" ").Trim();
+            if (content.Length > 180)
+            {
+                content = content[..177] + "...";
+            }
+
+            sb.AppendLine($"    - {comment.Author} ({comment.PublishedDate:yyyy-MM-dd}): {content}");
         }
     }
 }

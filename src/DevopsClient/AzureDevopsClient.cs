@@ -21,17 +21,26 @@ public class AzureDevOpsClient
             new AuthenticationHeaderValue("Basic", auth);
     }
 
-    public async Task<List<PullRequest>> GetPullRequestsAsync(
+    public async Task<List<PullRequest>> GetCompletedPullRequestsByAuthorAsync(
         string org,
         string project,
         string repoId,
+        string author,
         DateTime from,
         DateTime to)
     {
-        var allPrs = await GetPullRequestsCoreAsync(org, project, repoId, "all", includeCommentDetails: false);
-        return allPrs
-            .Where(pr => pr.CreatedDate >= from && pr.CreatedDate <= to)
-            .ToList();
+        ArgumentException.ThrowIfNullOrWhiteSpace(author);
+
+        return await GetPullRequestsCoreAsync(
+            org,
+            project,
+            repoId,
+            "completed",
+            includeDetails: true,
+            author: author,
+            timeFrom: from,
+            timeTo: to,
+            timeRangeType: "closed");
     }
 
     public async Task<List<PullRequest>> GetActivePullRequestsByAuthorAsync(
@@ -42,17 +51,39 @@ public class AzureDevOpsClient
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(author);
 
-        var activePrs = await GetPullRequestsCoreAsync(org, project, repoId, "active", includeCommentDetails: false);
-        var filtered = activePrs
-            .Where(pr => IsMatchForAuthor(pr.Author, author))
+        var activePrs = await GetPullRequestsCoreAsync(
+            org,
+            project,
+            repoId,
+            "active",
+            includeDetails: true,
+            author: author);
+
+        return activePrs
+            .Where(pr => pr.UnresolvedComments.Count > 0)
             .ToList();
+    }
 
-        foreach (var pr in filtered)
-        {
-            await PopulateUnresolvedCommentsByPersonAsync(pr, Uri.EscapeDataString(org.Trim()), Uri.EscapeDataString(project.Trim()), Uri.EscapeDataString(repoId.Trim()));
-        }
+    public async Task<List<PullRequest>> GetPullRequestsCreatedByAuthorAsync(
+        string org,
+        string project,
+        string repoId,
+        string author,
+        DateTime from,
+        DateTime to)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(author);
 
-        return filtered;
+        return await GetPullRequestsCoreAsync(
+            org,
+            project,
+            repoId,
+            "all",
+            includeDetails: true,
+            author: author,
+            timeFrom: from,
+            timeTo: to,
+            timeRangeType: "created");
     }
 
     private async Task<List<PullRequest>> GetPullRequestsCoreAsync(
@@ -60,7 +91,11 @@ public class AzureDevOpsClient
         string project,
         string repoId,
         string status,
-        bool includeCommentDetails = true)
+        bool includeDetails = true,
+        string? author = null,
+        DateTime? timeFrom = null,
+        DateTime? timeTo = null,
+        string? timeRangeType = null)
     {
         ValidatePathInput("org", org);
         ValidatePathInput("project", project);
@@ -83,6 +118,24 @@ public class AzureDevOpsClient
             var pullRequestsUrl =
                 $"https://dev.azure.com/{encodedOrg}/{encodedProject}/_apis/git/repositories/{encodedRepoId}/pullrequests" +
                 $"?searchCriteria.status={encodedStatus}&$top={pageSize}&$skip={skip}&api-version=7.1";
+
+                if (timeFrom.HasValue)
+            {
+                pullRequestsUrl +=
+                    $"&searchCriteria.minTime={Uri.EscapeDataString(timeFrom.Value.ToUniversalTime().ToString("O"))}";
+            }
+
+                if (timeTo.HasValue)
+            {
+                pullRequestsUrl +=
+                    $"&searchCriteria.maxTime={Uri.EscapeDataString(timeTo.Value.ToUniversalTime().ToString("O"))}";
+                }
+
+                if (!string.IsNullOrWhiteSpace(timeRangeType))
+                {
+                pullRequestsUrl +=
+                    $"&searchCriteria.queryTimeRangeType={Uri.EscapeDataString(timeRangeType)}";
+            }
 
             var json = await GetJsonAsync(pullRequestsUrl);
             var page = ParsePullRequests(json, repoId);
@@ -108,18 +161,100 @@ public class AzureDevOpsClient
             skip += pageSize;
         }
 
-        if (includeCommentDetails)
+        if (!string.IsNullOrWhiteSpace(author))
         {
-            foreach (var pr in prs)
+            prs = prs
+                .Where(pr => IsMatchForAuthor(pr, author))
+                .ToList();
+        }
+
+        if (timeRangeType?.Equals("created", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            prs = prs
+                .Where(pr => !timeFrom.HasValue || pr.CreatedDate >= timeFrom.Value)
+                .Where(pr => !timeTo.HasValue || pr.CreatedDate <= timeTo.Value)
+                .ToList();
+        }
+
+        if (timeRangeType?.Equals("closed", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            prs = prs
+                .Where(pr => !timeFrom.HasValue || pr.LastUpdatedAt >= timeFrom.Value)
+                .Where(pr => !timeTo.HasValue || pr.LastUpdatedAt <= timeTo.Value)
+                .ToList();
+        }
+
+        if (includeDetails)
+        {
+            await Task.WhenAll(prs.Select(async pr =>
             {
-                await PopulateUnresolvedCommentsByPersonAsync(pr, encodedOrg, encodedProject, encodedRepoId);
-            }
+                await Task.WhenAll(
+                    PopulateWorkItemsAsync(pr, encodedOrg, encodedProject, encodedRepoId),
+                    PopulateCommentDetailsAsync(pr, encodedOrg, encodedProject, encodedRepoId));
+            }));
         }
 
         return prs;
     }
 
-    private async Task PopulateUnresolvedCommentsByPersonAsync(
+    private async Task PopulateWorkItemsAsync(
+        PullRequest pr,
+        string encodedOrg,
+        string encodedProject,
+        string encodedRepoId)
+    {
+        var pullRequestUrl =
+            $"https://dev.azure.com/{encodedOrg}/{encodedProject}/_apis/git/repositories/{encodedRepoId}/pullrequests/{pr.Id}?includeWorkItemRefs=true&api-version=7.1";
+
+        var pullRequestJson = await GetJsonAsync(pullRequestUrl);
+        using var doc = JsonDocument.Parse(pullRequestJson);
+
+        if (!doc.RootElement.TryGetProperty("workItemRefs", out var workItemRefs) || workItemRefs.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        var items = new List<WorkItemReference>();
+
+        foreach (var workItemRef in workItemRefs.EnumerateArray())
+        {
+            var id = GetStringOrEmpty(workItemRef, "id");
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                continue;
+            }
+
+            items.Add(new WorkItemReference
+            {
+                Id = id,
+                Url = GetStringOrEmpty(workItemRef, "url")
+            });
+        }
+
+        await Task.WhenAll(items.Select(PopulateWorkItemTitleAsync));
+
+        pr.WorkItems = items;
+    }
+
+    private async Task PopulateWorkItemTitleAsync(WorkItemReference workItem)
+    {
+        if (string.IsNullOrWhiteSpace(workItem.Url))
+        {
+            return;
+        }
+
+        var separator = workItem.Url.Contains('?', StringComparison.Ordinal) ? '&' : '?';
+        var workItemUrl = $"{workItem.Url}{separator}fields=System.Title&api-version=7.1";
+        var workItemJson = await GetJsonAsync(workItemUrl);
+        using var doc = JsonDocument.Parse(workItemJson);
+
+        if (doc.RootElement.TryGetProperty("fields", out var fields) && fields.ValueKind == JsonValueKind.Object)
+        {
+            workItem.Title = GetStringOrEmpty(fields, "System.Title");
+        }
+    }
+
+    private async Task PopulateCommentDetailsAsync(
         PullRequest pr,
         string encodedOrg,
         string encodedProject,
@@ -137,15 +272,12 @@ public class AzureDevOpsClient
         }
 
         var unresolvedCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var unresolvedComments = new List<UnresolvedComment>();
+        var resolvedComments = new List<ResolvedComment>();
 
         foreach (var thread in threads.EnumerateArray())
         {
             var threadStatus = GetStringOrEmpty(thread, "status");
-            if (!threadStatus.Equals("active", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
             if (!thread.TryGetProperty("comments", out var comments) || comments.ValueKind != JsonValueKind.Array)
             {
                 continue;
@@ -159,6 +291,24 @@ public class AzureDevOpsClient
                     continue;
                 }
 
+                if (threadStatus.Equals("fixed", StringComparison.OrdinalIgnoreCase))
+                {
+                    resolvedComments.Add(new ResolvedComment
+                    {
+                        ThreadId = GetIntOrDefault(thread, "id"),
+                        Author = GetNestedStringOrEmpty(comment, "author", "displayName"),
+                        Content = GetStringOrEmpty(comment, "content"),
+                        PublishedDate = GetDateOrDefault(comment, "publishedDate")
+                    });
+
+                    continue;
+                }
+
+                if (!threadStatus.Equals("active", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
                 var person = GetNestedStringOrEmpty(comment, "author", "displayName");
                 if (string.IsNullOrWhiteSpace(person))
                 {
@@ -168,10 +318,24 @@ public class AzureDevOpsClient
                 unresolvedCounts[person] = unresolvedCounts.TryGetValue(person, out var current)
                     ? current + 1
                     : 1;
+
+                var content = GetStringOrEmpty(comment, "content").Trim();
+                if (!string.IsNullOrWhiteSpace(content))
+                {
+                    unresolvedComments.Add(new UnresolvedComment
+                    {
+                        ThreadId = GetIntOrDefault(thread, "id"),
+                        Author = person,
+                        Content = content,
+                        PublishedDate = GetDateOrDefault(comment, "publishedDate")
+                    });
+                }
             }
         }
 
         pr.UnresolvedCommentsByPerson = unresolvedCounts;
+        pr.UnresolvedComments = unresolvedComments;
+        pr.ResolvedComments = resolvedComments;
     }
 
     private static List<PullRequest> ParsePullRequests(string json, string repoId)
@@ -195,6 +359,7 @@ public class AzureDevOpsClient
                 Repository = repoId,
                 Branch = GetStringOrEmpty(item, "sourceRefName"),
                 Author = GetAuthor(item),
+                AuthorUniqueName = GetNestedStringOrEmpty(item, "createdBy", "uniqueName"),
                 CreatedDate = GetDateOrDefault(item, "creationDate"),
                 LastUpdatedAt = GetDateOrDefault(item, "closedDate")
             };
@@ -230,16 +395,36 @@ public class AzureDevOpsClient
     private async Task<string> GetJsonAsync(string url)
     {
         using var response = await _http.GetAsync(url);
+        var responseBody = await response.Content.ReadAsStringAsync();
 
         if (!response.IsSuccessStatusCode)
         {
-            var responseBody = await response.Content.ReadAsStringAsync();
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                throw new HttpRequestException(
+                    "Azure DevOps authentication failed (401 Unauthorized). " +
+                    "Check that AZDO_PAT is set in this terminal session, not expired, and has permission to read the target repository.");
+            }
+
             throw new HttpRequestException(
                 $"Azure DevOps request failed with {(int)response.StatusCode} ({response.ReasonPhrase}). " +
-                $"URL: {url}. Response: {responseBody}");
+                $"URL: {url}. Response: {BuildCompactErrorResponse(responseBody)}");
         }
 
-        return await response.Content.ReadAsStringAsync();
+        return responseBody;
+    }
+
+    private static string BuildCompactErrorResponse(string responseBody)
+    {
+        if (string.IsNullOrWhiteSpace(responseBody))
+        {
+            return "<empty response>";
+        }
+
+        var compact = responseBody.ReplaceLineEndings(" ").Trim();
+        return compact.Length <= 400
+            ? compact
+            : compact[..400] + "...";
     }
 
     private static string GetStringOrEmpty(JsonElement element, string propertyName)
@@ -272,14 +457,22 @@ public class AzureDevOpsClient
         return prop.TryGetDateTime(out var date) ? date : default;
     }
 
-    private static bool IsMatchForAuthor(string prAuthor, string requestedAuthor)
+    private static int GetIntOrDefault(JsonElement element, string propertyName)
     {
-        if (string.IsNullOrWhiteSpace(prAuthor))
+        if (!element.TryGetProperty(propertyName, out var prop))
         {
-            return false;
+            return default;
         }
 
-        return prAuthor.Contains(requestedAuthor, StringComparison.OrdinalIgnoreCase);
+        return prop.ValueKind == JsonValueKind.Number && prop.TryGetInt32(out var number)
+            ? number
+            : default;
+    }
+
+    private static bool IsMatchForAuthor(PullRequest pr, string requestedAuthor)
+    {
+        return pr.Author.Contains(requestedAuthor, StringComparison.OrdinalIgnoreCase)
+            || pr.AuthorUniqueName.Contains(requestedAuthor, StringComparison.OrdinalIgnoreCase);
     }
 
     private static void ValidatePathInput(string name, string value)
