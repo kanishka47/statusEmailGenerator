@@ -112,7 +112,7 @@ public sealed class AzureOpenAiClient
             data.ValueKind != JsonValueKind.Array ||
             data.GetArrayLength() == 0)
         {
-            throw new InvalidOperationException("Azure OpenAI embeddings response did not contain any data.");
+            throw new InvalidOperationException("Oops!Azure OpenAI embeddings response did not contain any data.");
         }
 
         var firstItem = data[0];
