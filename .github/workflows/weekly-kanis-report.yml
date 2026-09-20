@@ -1,5 +1,6 @@
 name: Weekly Kanis engineering report
 
+# Keep manual dispatch available for validation and custom reporting periods.
 on:
   schedule:
     - cron: "0 2 * * 1"
